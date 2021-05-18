@@ -39,13 +39,43 @@ void writeImage(const std::string& filename, const std::vector<float>& image, si
 }
 inline float calcKernel(int x, int y, int width, float Gx, float Gy, float hx, float hg)
 {
-    const float xi = x % width;
-    const float yi = y % width;
-    const float xj = x / width;
-    const float yj = y / width;
+    const float xi = x % width, yi = y % width;
+    const float xj = x / width, yj = y / width;
     double norm2_xy = (xi - yi) * (xi - yi) + (xj - yj) * (xj - yj);
     float norm2_g = (Gx - Gy) * (Gx - Gy);
     return expf(-0.5 * norm2_xy / (hx * hx)) * expf(-0.5 * norm2_g / (hg * hg));
+}
+
+void BilateralFilterHelper(float image_filt[],
+     const int x,
+     const float image[],
+     const int width,
+     const int height,
+     const float hx,
+     const float hg)
+{
+    const int row = x % width, col = x / width;
+    const float Gx = image[x];
+    const int halfWindowSize = (int)ceilf(3 * hx);
+
+    float sum_kernel = 0;
+    float sum_g_kernel = 0;
+    /// Loop for neighbors:
+    for (int i = (row - halfWindowSize); i <= (row + halfWindowSize); ++i)
+    {
+        if (i < 0 || i >= width) continue;
+        for (int j = (col - halfWindowSize); j <= (col + halfWindowSize); ++j)
+        {
+            if (j < 0 || j >= (int)height) continue;
+            /// Y : neighbors
+            const int y = i + j * width;
+            const float Gy = image[y];
+            const float kernel = calcKernel(x, y, width, Gx, Gy, hx, hg);
+            sum_kernel += kernel;
+            sum_g_kernel += kernel * Gy;
+        }
+    }
+    image_filt[x] = sum_g_kernel / sum_kernel;
 }
 std::vector<float> BilateralFilter(const std::vector<float>& image,
      const int width,
@@ -53,40 +83,14 @@ std::vector<float> BilateralFilter(const std::vector<float>& image,
      const float hx,
      const float hg)
 {
-    int halfWindowSize = (int)ceilf(3 * hx);
+    const int imSize = static_cast<int>(image.size());
     std::vector<float> image_filt(image.size());
 
-    for (int row = 0; row < width; ++row)
+    for (int x = 0; x < imSize; ++x)
     {
-        printf("%i\n", row);
-        for (int col = 0; col < height; ++col)
-        {
-            const int x = row + col * width;
-            const float Gx = image[x];
-            float sum_kernel = 0;
-            float sum_g_kernel = 0;
-            /// Loop for neighbors:
-            for (int i = (row - halfWindowSize); i <= (row + halfWindowSize); ++i)
-            {
-                if (i < 0 || i >= width) continue;
-                for (int j = (col - halfWindowSize); j <= (col + halfWindowSize); ++j)
-                {
-                    if (j < 0 || j >= (int)height) continue;
-                    /// Y : neighbors
-                    const int y = i + j * width;
-                    const float Gy = image[y];
-                    const float kernel = calcKernel(x, y, width, Gx, Gy, hx, hg);
-                    sum_kernel += kernel;
-                    sum_g_kernel += kernel * Gy;
-                }
-            }
-            image_filt[x] = sum_g_kernel / sum_kernel;
-        }
+        BilateralFilterHelper(image_filt.data(), x, image.data(), width, height, hx, hg);
     }
     return image_filt;
-    //         function out = Kernel(X, Y, Gx, Gy, hx, hg)
-    //              out = exp(-0.5 * norm(X - Y) ^ 2 / hx ^ 2) * exp(-0.5 * norm(Gx - Gy) ^ 2 / hg ^ 2);
-    //    end
 }
 int main()
 {
