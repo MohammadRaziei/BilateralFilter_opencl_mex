@@ -44,7 +44,7 @@ inline float calcKernel(int x, int y, int width, float Gx, float Gy, float hx, f
     const float xj = x / width;
     const float yj = y / width;
     double norm2_xy = (xi - yi) * (xi - yi) + (xj - yj) * (xj - yj);
-    float norm2_g = Gx * Gx + Gy * Gy;
+    float norm2_g = (Gx - Gy) * (Gx - Gy);
     return expf(-0.5 * norm2_xy / (hx * hx)) * expf(-0.5 * norm2_g / (hg * hg));
 }
 std::vector<float> BilateralFilter(const std::vector<float>& image,
