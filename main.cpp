@@ -5,6 +5,7 @@
 
 #include "opencl.h"
 #include <QImageReader>
+#include <QImageWriter>
 #include <QtCore>
 #include <QSet>
 
@@ -27,6 +28,25 @@ void readImage(const std::string& filename, std::vector<float>& imageFloat, size
          [](const uchar& ch) -> float { return static_cast<float>(ch) / 255.f; });
 }
 
+void writeImage(const std::string& filename, const std::vector<float>& image, size_t width, size_t height)
+{
+    std::vector<uchar> buf(image.size());
+    std::transform(image.begin(), image.end(), buf.begin(), //
+         [](const float& f) -> uchar { return static_cast<uchar>(f * 255.f); });
+    QImage img(buf.data(), width, height, QImage::Format_Grayscale8);
+    QImageWriter writer(filename.c_str());
+    writer.write(img);
+}
+inline float calcKernel(size_t x, size_t y, size_t width, float Gx, float Gy, float hx, float hg)
+{
+    size_t xy = (x > y) ? x - y : y - x;
+    float temp = (float)(xy % width);
+    float norm2_xy = temp * temp;
+    temp = (float)(xy / width);
+    norm2_xy += temp * temp;
+    float norm2_g = Gx * Gx + Gy * Gy;
+    return expf(-0.5 * norm2_g / (hx * hx)) * expf(-0.5 * norm2_g / (hg * hg));
+}
 std::vector<float> BilateralFilter(const std::vector<float>& image,
      size_t width,
      size_t height,
@@ -38,6 +58,7 @@ std::vector<float> BilateralFilter(const std::vector<float>& image,
 
     for (size_t row = 0; row < width; ++row)
     {
+        printf("%i\n", row);
         for (size_t col = 0; col < height; ++col)
         {
             size_t x = row + col * width;
@@ -54,9 +75,8 @@ std::vector<float> BilateralFilter(const std::vector<float>& image,
                     size_t y = i + j * width;
                     float Gy = image[y];
                     float Gx = image[x];
-                    //                    kernel = Kernel(X, Y, Gx, Gy, hx, hg);
-                    float kernel = float(x == y);
-                    sum_kernel += 0;
+                    float kernel = calcKernel(x, y, width, Gx, Gy, hx, hg);
+                    sum_kernel += kernel;
                     sum_g_kernel += kernel * Gy;
                 }
             }
@@ -74,9 +94,15 @@ int main()
 
     std::vector<float> image;
     size_t width, height;
-    readImage("A.png", image, width, height);
+    readImage("image_noisy.png", image, width, height);
+    printf("w: %i, h: %i \n", width, height);
     //    for (auto i : image) printf("%i, ", (int)(i * 255.f));
     std::vector<float> image_filt = BilateralFilter(image, width, height, 3.f, 0.1f);
+
+    writeImage("image_filt.png", image_filt, width, height);
+    //    img.scaled(QSize(width, height), Qt::KeepAspectRatio);
+
+    //    writer.write();
     //    //get all platforms (drivers)
     //    std::vector<cl::Platform> all_platforms;
     //    cl::Platform::get(&all_platforms);
