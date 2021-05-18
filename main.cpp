@@ -33,54 +33,54 @@ void writeImage(const std::string& filename, const std::vector<float>& image, si
     std::vector<uchar> buf(image.size());
     std::transform(image.begin(), image.end(), buf.begin(), //
          [](const float& f) -> uchar { return static_cast<uchar>(f * 255.f); });
-    QImage img(buf.data(), width, height, QImage::Format_Grayscale8);
+    QImage img(buf.data(), (int)width, (int)height, QImage::Format_Grayscale8);
     QImageWriter writer(filename.c_str());
     writer.write(img);
 }
-inline float calcKernel(size_t x, size_t y, size_t width, float Gx, float Gy, float hx, float hg)
+inline float calcKernel(int x, int y, int width, float Gx, float Gy, float hx, float hg)
 {
-    size_t xy = (x > y) ? x - y : y - x;
-    float temp = (float)(xy % width);
-    float norm2_xy = temp * temp;
-    temp = (float)(xy / width);
-    norm2_xy += temp * temp;
+    const float xi = x % width;
+    const float yi = y % width;
+    const float xj = x / width;
+    const float yj = y / width;
+    double norm2_xy = (xi - yi) * (xi - yi) + (xj - yj) * (xj - yj);
     float norm2_g = Gx * Gx + Gy * Gy;
-    return expf(-0.5 * norm2_g / (hx * hx)) * expf(-0.5 * norm2_g / (hg * hg));
+    return expf(-0.5 * norm2_xy / (hx * hx)) * expf(-0.5 * norm2_g / (hg * hg));
 }
 std::vector<float> BilateralFilter(const std::vector<float>& image,
-     size_t width,
-     size_t height,
-     float hx,
-     float hg)
+     const int width,
+     const int height,
+     const float hx,
+     const float hg)
 {
-    size_t halfWindowSize = (size_t)ceilf(3 * hx);
+    int halfWindowSize = (int)ceilf(3 * hx);
     std::vector<float> image_filt(image.size());
 
-    for (size_t row = 0; row < width; ++row)
+    for (int row = 0; row < width; ++row)
     {
         printf("%i\n", row);
-        for (size_t col = 0; col < height; ++col)
+        for (int col = 0; col < height; ++col)
         {
-            size_t x = row + col * width;
+            const int x = row + col * width;
+            const float Gx = image[x];
             float sum_kernel = 0;
             float sum_g_kernel = 0;
             /// Loop for neighbors:
-            for (int i = int(row - halfWindowSize); i <= int(col + halfWindowSize); ++i)
+            for (int i = (row - halfWindowSize); i <= (row + halfWindowSize); ++i)
             {
-                if (i < 0 || i >= (int)width) continue;
-                for (int j = int(row - halfWindowSize); j <= int(col + halfWindowSize); ++j)
+                if (i < 0 || i >= width) continue;
+                for (int j = (col - halfWindowSize); j <= (col + halfWindowSize); ++j)
                 {
                     if (j < 0 || j >= (int)height) continue;
                     /// Y : neighbors
-                    size_t y = i + j * width;
-                    float Gy = image[y];
-                    float Gx = image[x];
-                    float kernel = calcKernel(x, y, width, Gx, Gy, hx, hg);
+                    const int y = i + j * width;
+                    const float Gy = image[y];
+                    const float kernel = calcKernel(x, y, width, Gx, Gy, hx, hg);
                     sum_kernel += kernel;
                     sum_g_kernel += kernel * Gy;
                 }
             }
-            image_filt[row + col * width] = sum_g_kernel / sum_kernel;
+            image_filt[x] = sum_g_kernel / sum_kernel;
         }
     }
     return image_filt;
@@ -95,9 +95,9 @@ int main()
     std::vector<float> image;
     size_t width, height;
     readImage("image_noisy.png", image, width, height);
-    printf("w: %i, h: %i \n", width, height);
+    printf("w: %llu, h: %llu \n", width, height);
     //    for (auto i : image) printf("%i, ", (int)(i * 255.f));
-    std::vector<float> image_filt = BilateralFilter(image, width, height, 3.f, 0.1f);
+    std::vector<float> image_filt = BilateralFilter(image, (int)width, (int)height, 5.f, 0.1f);
 
     writeImage("image_filt.png", image_filt, width, height);
     //    img.scaled(QSize(width, height), Qt::KeepAspectRatio);
