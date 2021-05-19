@@ -36,16 +36,14 @@ void writeImage(const std::string& filename, const std::vector<float>& image, si
     QImageWriter writer(filename.c_str());
     writer.write(img);
 }
-inline float calcKernel(int x, int y, int width, float Gx, float Gy, float hx, float hg)
+inline float calcKernel(int xi, int xj, int yi, int yj, float Gx, float Gy, float hx, float hg)
 {
-    const float xi = x % width, yi = y % width;
-    const float xj = x / width, yj = y / width;
-    double norm2_xy = (xi - yi) * (xi - yi) + (xj - yj) * (xj - yj);
+    float norm2_xy = (xi - yi) * (xi - yi) + (xj - yj) * (xj - yj);
     float norm2_g = (Gx - Gy) * (Gx - Gy);
-    return expf(-0.5 * norm2_xy / (hx * hx)) * expf(-0.5 * norm2_g / (hg * hg));
+    return expf(-0.5f * norm2_xy / (hx * hx)) * expf(-0.5f * norm2_g / (hg * hg));
 }
 
-void BilateralFilterHelper(float image_filt[],
+void BilateralFilterCore(float image_filt[],
      const int x,
      const float image[],
      const int width,
@@ -67,9 +65,8 @@ void BilateralFilterHelper(float image_filt[],
         {
             if (j < 0 || j >= (int)height) continue;
             /// Y : neighbors
-            const int y = i + j * width;
-            const float Gy = image[y];
-            const float kernel = calcKernel(x, y, width, Gx, Gy, hx, hg);
+            const float Gy = image[i + j * width];
+            const float kernel = calcKernel(row, col, i, j, Gx, Gy, hx, hg);
             sum_kernel += kernel;
             sum_g_kernel += kernel * Gy;
         }
@@ -87,7 +84,7 @@ std::vector<float> BilateralFilter(const std::vector<float>& image,
 
     for (int x = 0; x < imSize; ++x)
     {
-        BilateralFilterHelper(image_filt.data(), x, image.data(), width, height, hx, hg);
+        BilateralFilterCore(image_filt.data(), x, image.data(), width, height, hx, hg);
     }
     return image_filt;
 }
@@ -101,23 +98,31 @@ std::vector<float> BilateralFilterCPU(const std::vector<float>& image,
     const int imSize = static_cast<int>(image.size());
     std::vector<float> image_filt(image.size());
     Concurrency::parallel_for(0, imSize, [&](int x) {
-        BilateralFilterHelper(image_filt.data(), x, image.data(), width, height, hx, hg);
+        BilateralFilterCore(image_filt.data(), x, image.data(), width, height, hx, hg);
     });
     return image_filt;
 }
 int main()
 {
+    typedef decltype(std::chrono::high_resolution_clock::now()) Time;
+    Time t_start, t_end;
+    std::vector<float> image_filt;
     printf("hi\n");
 
     std::vector<float> image;
     size_t width, height;
     readImage("image_noisy.png", image, width, height);
     printf("w: %llu, h: %llu \n", width, height);
-    //    for (auto i : image) printf("%i, ", (int)(i * 255.f));
-    auto t_start = std::chrono::high_resolution_clock::now();
-    std::vector<float> image_filt = BilateralFilterCPU(image, (int)width, (int)height, 5.f, 0.1f);
-    auto t_end = std::chrono::high_resolution_clock::now();
-    std::cout << "Elapsed time is " << (t_end - t_start).count() * 1E-6 << " miliseconds\n";
+
+    t_start = std::chrono::high_resolution_clock::now();
+    image_filt = BilateralFilterCPU(image, (int)width, (int)height, 5.f, 0.1f);
+    t_end = std::chrono::high_resolution_clock::now();
+    printf("Elapsed time is %0.2f miliseconds\n", (t_end - t_start).count() * 1E-6);
+
+    t_start = std::chrono::high_resolution_clock::now();
+    image_filt = BilateralFilter(image, (int)width, (int)height, 5.f, 0.1f);
+    t_end = std::chrono::high_resolution_clock::now();
+    printf("Elapsed time is %0.2f miliseconds\n", (t_end - t_start).count() * 1E-6);
 
     writeImage("image_filt.png", image_filt, width, height);
     //    img.scaled(QSize(width, height), Qt::KeepAspectRatio);
