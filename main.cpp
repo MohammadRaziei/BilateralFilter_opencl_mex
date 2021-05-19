@@ -7,11 +7,10 @@
 #include <QImageReader>
 #include <QImageWriter>
 #include <QtCore>
-#include <QSet>
+#include <ppl.h>
 
-#include <set>
+#include <chrono>
 #define qout qDebug().noquote()
-//#include
 
 void readImage(const std::string& filename, std::vector<float>& imageFloat, size_t& width, size_t& height)
 {
@@ -92,6 +91,20 @@ std::vector<float> BilateralFilter(const std::vector<float>& image,
     }
     return image_filt;
 }
+
+std::vector<float> BilateralFilterCPU(const std::vector<float>& image,
+     const int width,
+     const int height,
+     const float hx,
+     const float hg)
+{
+    const int imSize = static_cast<int>(image.size());
+    std::vector<float> image_filt(image.size());
+    Concurrency::parallel_for(0, imSize, [&](int x) {
+        BilateralFilterHelper(image_filt.data(), x, image.data(), width, height, hx, hg);
+    });
+    return image_filt;
+}
 int main()
 {
     printf("hi\n");
@@ -101,7 +114,10 @@ int main()
     readImage("image_noisy.png", image, width, height);
     printf("w: %llu, h: %llu \n", width, height);
     //    for (auto i : image) printf("%i, ", (int)(i * 255.f));
-    std::vector<float> image_filt = BilateralFilter(image, (int)width, (int)height, 5.f, 0.1f);
+    auto t_start = std::chrono::high_resolution_clock::now();
+    std::vector<float> image_filt = BilateralFilterCPU(image, (int)width, (int)height, 5.f, 0.1f);
+    auto t_end = std::chrono::high_resolution_clock::now();
+    std::cout << "Elapsed time is " << (t_end - t_start).count() * 1E-6 << " miliseconds\n";
 
     writeImage("image_filt.png", image_filt, width, height);
     //    img.scaled(QSize(width, height), Qt::KeepAspectRatio);
